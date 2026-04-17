@@ -1,50 +1,78 @@
-```
+```gitignore
 # Jupyter Notebook checkpoints
-.checkpoints/
+.ipynb_checkpoints/
+*.ipynb~
 
-# Python cache
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-
-# Environment variables
-.env
-.env.local
-*.env.*
-
-# Temporary files
-*.tmp
-*.swp
-*.swo
-
-# Logs
-*.log
-
-# OS generated files
-.DS_Store
-Thumbs.db
-
-# Coverage reports
-coverage/
-htmlcov/
-.coverage
+.Python
+*.so
+*.egg-info/
+.eggs/
 
 # Virtual environments
 venv/
 .venv/
 env/
-.ENV
+.env/
+ENV/
 
-# Build outputs
-build/
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Distribution / packaging
 dist/
-*.egg-info/
+build/
+*.egg
+*.whl
+pip-log.txt
+pip-delete-this-directory.txt
 
-# IDE specific
+# IDEs
 .vscode/
 .idea/
+*.swp
+*.swo
 
-# MyPy cache
-.mypy_cache/
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+*.out
+
+# Environment variables
+.env
+.env.local
+*.env
+*.env.*
+
+# Coverage reports
+.coverage
+htmlcov/
+.coverage.*
+.cache
+
+# Temporary files
+*.tmp
+*.temp
+*~
+```
+
+Wait, I need to reconsider this. The only change was modifying a notebook file (`notebooks/train_on_kaggle.ipynb`), which is a source/config file. There are no build artifacts, dependencies, or temp files in the changes. Following rule #6:
+
+```gitignore
+
 ```
