@@ -4,11 +4,29 @@ Feature Engineering - Создание технических индикатор
 
 import pandas as pd
 import numpy as np
-from typing import List, Dict, Optional
+from typing import Dict
 import logging
 import yaml
 
 logger = logging.getLogger(__name__)
+
+
+TIMEFRAME_TO_PANDAS_FREQ = {
+    '1m': '1min',
+    '3m': '3min',
+    '5m': '5min',
+    '15m': '15min',
+    '30m': '30min',
+    '1h': '1h',
+    '2h': '2h',
+    '4h': '4h',
+    '6h': '6h',
+    '8h': '8h',
+    '12h': '12h',
+    '1d': '1D',
+    '3d': '3D',
+    '1w': '1W',
+}
 
 
 class FeatureEngineer:
@@ -190,9 +208,8 @@ class FeatureEngineer:
             # Ресемплинг к целевому таймфрейму (если нужно)
             if len(df_featured) > 0:
                 # Группировка по времени и взятие последнего значения
-                df_resampled = df_featured[available_features].resample(
-                    base_df.index.freq if hasattr(base_df.index, 'freq') else '1H'
-                ).last()
+                target_freq = TIMEFRAME_TO_PANDAS_FREQ.get(target_timeframe, '1h')
+                df_resampled = df_featured[available_features].resample(target_freq).last()
                 
                 # Переименование с префиксом таймфрейма
                 rename_dict = {c: f"{tf}_{c}" for c in available_features}

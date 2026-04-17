@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple
 from pathlib import Path
 import logging
 import yaml
@@ -244,13 +244,14 @@ class MultiCryptoTrainer:
         
         return prepared_data
     
-    def create_model(self, input_size: int) -> MultiTimeframeLSTM:
+    def create_model(self, input_size: int, num_timeframes: int = None) -> MultiTimeframeLSTM:
         """Создание модели согласно конфигурации."""
+        num_timeframes = num_timeframes or len(self.timeframes)
         model = MultiTimeframeLSTM(
             input_size=input_size,
             hidden_size=self.model_config['hidden_units'],
             num_layers=self.model_config.get('num_layers', 2),
-            num_timeframes=len(self.timeframes),
+            num_timeframes=num_timeframes,
             dropout=self.model_config['dropout_rate'],
             fusion_method=self.model_config.get('fusion_method', 'attention')
         ).to(self.device)
@@ -288,7 +289,7 @@ class MultiCryptoTrainer:
         input_size = sample_X.shape[2]
         
         # Создание модели
-        model = self.create_model(input_size)
+        model = self.create_model(input_size, num_timeframes=len(prepared_data))
         self.models[symbol] = model
         
         # Оптимизатор и функция потерь
@@ -306,6 +307,18 @@ class MultiCryptoTrainer:
         
         train_end = int(min_samples * train_ratio)
         val_end = int(min_samples * (train_ratio + val_ratio))
+        
+        if train_end < 1:
+            raise ValueError(
+                f"Not enough samples for training {symbol}: min_samples={min_samples}, "
+                f"train_split={train_ratio}"
+            )
+        if val_end <= train_end:
+            logger.warning(
+                f"Validation split too small for {symbol} "
+                f"(train_end={train_end}, val_end={val_end}). "
+                "Validation will be skipped."
+            )
         
         # Подготовка DataLoader
         train_losses, val_losses = [], []
@@ -343,6 +356,12 @@ class MultiCryptoTrainer:
                 
                 epoch_loss += loss.item()
                 num_batches += 1
+            
+            if num_batches == 0:
+                raise ValueError(
+                    f"No training batches for {symbol}. "
+                    f"min_samples={min_samples}, batch_size={batch_size}, train_end={train_end}"
+                )
             
             avg_train_loss = epoch_loss / num_batches
             train_losses.append(avg_train_loss)
@@ -422,7 +441,16 @@ class MultiCryptoTrainer:
         
         if symbol in self.models:
             model_path = f"{path}/{symbol.replace('/', '_')}_model.pth"
-            torch.save(self.models[symbol].state_dict(), model_path)
+            model = self.models[symbol]
+            torch.save({
+                'model_state_dict': model.state_dict(),
+                'input_size': model.input_size,
+                'num_timeframes': model.num_timeframes_actual,
+                'hidden_size': model.hidden_size,
+                'num_layers': model.num_layers,
+                'dropout_rate': model.dropout_rate,
+                'fusion_method': model.fusion_method,
+            }, model_path)
             logger.info(f"Model saved to {model_path}")
     
     def load_model(self, symbol: str, path: str = "models/") -> MultiTimeframeLSTM:
@@ -432,11 +460,25 @@ class MultiCryptoTrainer:
         if not Path(model_path).exists():
             raise FileNotFoundError(f"Model not found: {model_path}")
         
-        # Определение input_size из конфига (упрощенно)
-        input_size = 30  # Примерное количество признаков
+        checkpoint = torch.load(model_path, map_location=self.device)
         
-        model = self.create_model(input_size)
-        model.load_state_dict(torch.load(model_path, map_location=self.device))
+        # Поддержка старого формата, где сохранялся только state_dict
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            input_size = checkpoint.get('input_size')
+            if input_size is None:
+                raise ValueError(
+                    f"Model metadata missing 'input_size' in checkpoint: {model_path}"
+                )
+            num_timeframes = checkpoint.get('num_timeframes', len(self.timeframes))
+            model = self.create_model(input_size, num_timeframes=num_timeframes)
+            model.load_state_dict(checkpoint['model_state_dict'])
+        else:
+            logger.warning(
+                "Loaded legacy checkpoint without metadata. "
+                "Using fallback input_size=30, which may be incompatible."
+            )
+            model = self.create_model(30, num_timeframes=len(self.timeframes))
+            model.load_state_dict(checkpoint)
         model.eval()
         
         self.models[symbol] = model
