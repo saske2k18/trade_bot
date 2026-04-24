@@ -1,6 +1,4 @@
-"""
-Main Training Script - Запуск обучения нейросети на 5 криптовалютах и 7 таймфреймах.
-"""
+"""Запуск обучения нейросети на криптовалютах и таймфреймах."""
 
 import logging
 import argparse
@@ -43,16 +41,32 @@ def main():
     parser.add_argument('--timeframes', nargs='+', help='Список таймфреймов')
     parser.add_argument('--epochs', type=int, help='Количество эпох обучения')
     parser.add_argument('--limit', type=int, default=1000, help='Количество свечей для загрузки')
+    parser.add_argument(
+        '--history-mode',
+        choices=['latest', 'full'],
+        default='full',
+        help='Режим загрузки данных: latest (последние свечи) или full (вся доступная история)',
+    )
+    parser.add_argument(
+        '--start-date',
+        type=str,
+        default=None,
+        help='Стартовая дата для режима full в формате YYYY-MM-DD',
+    )
+    parser.add_argument(
+        '--batch-limit',
+        type=int,
+        default=1000,
+        help='Размер батча при пагинации исторических данных',
+    )
     parser.add_argument('--config', type=str, default='configs/config.yaml', help='Путь к конфигу')
     args = parser.parse_args()
     
-    # Настройка логирования
     logger = setup_logging(args.config)
     logger.info("=" * 60)
     logger.info("Starting cryptocurrency ML model training")
     logger.info("=" * 60)
     
-    # Загрузка конфига
     with open(args.config, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
     
@@ -62,14 +76,12 @@ def main():
     logger.info(f"Symbols: {symbols}")
     logger.info(f"Timeframes: {timeframes}")
     
-    # Шаг 1: Сбор данных
     logger.info("\n" + "=" * 60)
-    logger.info("Step 1: Collecting data from exchange")
+    logger.info("Step 1: Collecting data from exchange (%s mode)", args.history_mode)
     logger.info("=" * 60)
     
     collector = DataCollector(config_path=args.config)
     
-    # Обновляем символы и таймфреймы в коллекторе
     collector.symbols = symbols
     collector.timeframes = timeframes
     
@@ -80,7 +92,15 @@ def main():
         
         for tf in timeframes:
             try:
-                df = collector.get_latest_candles(symbol, tf, count=args.limit)
+                if args.history_mode == 'full':
+                    df = collector.fetch_full_history(
+                        symbol=symbol,
+                        timeframe=tf,
+                        start_date=args.start_date,
+                        batch_limit=args.batch_limit,
+                    )
+                else:
+                    df = collector.get_latest_candles(symbol, tf, count=args.limit)
                 
                 if not df.empty:
                     all_data[symbol][tf] = df
@@ -91,7 +111,6 @@ def main():
             except Exception as e:
                 logger.error(f"  ✗ {tf}: Error - {str(e)}")
     
-    # Проверка наличия данных
     valid_symbols = [s for s in symbols if len(all_data.get(s, {})) > 0]
     
     if not valid_symbols:
@@ -100,7 +119,6 @@ def main():
     
     logger.info(f"\nData collection complete for {len(valid_symbols)} symbols")
     
-    # Шаг 2: Feature Engineering
     logger.info("\n" + "=" * 60)
     logger.info("Step 2: Feature engineering")
     logger.info("=" * 60)
@@ -113,13 +131,11 @@ def main():
         for tf in all_data[symbol]:
             df = all_data[symbol][tf]
             
-            # Добавление всех признаков
             featured_df = feature_engineer.add_all_features(df)
             all_data[symbol][tf] = featured_df
             
             logger.info(f"  ✓ {tf}: {len(featured_df)} samples, {featured_df.shape[1]} features")
     
-    # Шаг 3: Обучение моделей
     logger.info("\n" + "=" * 60)
     logger.info("Step 3: Training models")
     logger.info("=" * 60)
@@ -146,6 +162,8 @@ def main():
                 'train_loss': result['train_losses'][-1] if result['train_losses'] else None,
                 'val_loss': result['val_losses'][-1] if result['val_losses'] else None
             }
+
+            trainer.save_model(symbol)
             
             logger.info(f"✓ Training complete for {symbol}")
             logger.info(f"  Final train loss: {result['train_losses'][-1]:.4f}")
@@ -158,7 +176,6 @@ def main():
                 'error': str(e)
             }
     
-    # Итоговый отчет
     logger.info("\n" + "=" * 60)
     logger.info("TRAINING SUMMARY")
     logger.info("=" * 60)

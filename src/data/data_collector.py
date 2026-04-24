@@ -1,11 +1,8 @@
-"""
-Data Collector - Загрузка исторических данных криптовалют с биржи.
-Поддерживает множественные таймфреймы и топ-5 криптовалют.
-"""
+"""Загрузка исторических данных криптовалют с биржи."""
 
 import ccxt
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional
 import logging
@@ -43,7 +40,7 @@ class DataCollector:
         
         logger.info(f"DataCollector initialized for {len(self.symbols)} symbols and {len(self.timeframes)} timeframes")
     
-    def fetch_ohlcv(self, symbol: str, timeframe: str, limit: int = 1000, 
+    def fetch_ohlcv(self, symbol: str, timeframe: str, limit: int = 1000,
                     since: Optional[int] = None) -> pd.DataFrame:
         """
         Загрузка OHLCV данных для указанной пары и таймфрейма.
@@ -132,14 +129,68 @@ class DataCollector:
     
     def get_latest_candles(self, symbol: str, timeframe: str, count: int = 100) -> pd.DataFrame:
         """Получение последних N свечей для символа и таймфрейма."""
-        # Сначала пробуем загрузить из кэша
         df = self.load_cached_data(symbol, timeframe)
         
         if df is not None and len(df) >= count:
             return df.tail(count)
         
-        # Если кэш недоступен или недостаточно данных, загружаем с биржи
         return self.fetch_ohlcv(symbol, timeframe, limit=count)
+
+    def fetch_full_history(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_date: Optional[str] = None,
+        batch_limit: int = 1000,
+        max_batches: Optional[int] = None,
+    ) -> pd.DataFrame:
+        """Загрузка истории с пагинацией батчами от start_date до текущего момента."""
+        start_date = start_date or self.config.get('data', {}).get('history', {}).get('start_date', '2010-01-01')
+        since_ms = int(pd.Timestamp(start_date, tz='UTC').timestamp() * 1000)
+        batches = max_batches or self.config.get('data', {}).get('history', {}).get('max_batches_per_request', 3000)
+
+        logger.info(
+            "Fetching full history for %s %s from %s (batch_limit=%s, max_batches=%s)",
+            symbol,
+            timeframe,
+            start_date,
+            batch_limit,
+            batches,
+        )
+
+        all_chunks: List[pd.DataFrame] = []
+        last_ts: Optional[int] = None
+
+        for batch_idx in range(batches):
+            chunk = self.fetch_ohlcv(symbol=symbol, timeframe=timeframe, limit=batch_limit, since=since_ms)
+            if chunk.empty:
+                break
+
+            chunk = chunk.sort_index()
+            all_chunks.append(chunk)
+
+            latest_ts = int(chunk.index[-1].timestamp() * 1000)
+            if last_ts is not None and latest_ts <= last_ts:
+                break
+
+            last_ts = latest_ts
+            since_ms = latest_ts + 1
+
+            if len(chunk) < batch_limit:
+                break
+
+            if (batch_idx + 1) % 50 == 0:
+                logger.info("Fetched %s batches for %s %s", batch_idx + 1, symbol, timeframe)
+
+        if not all_chunks:
+            logger.warning("Full history is empty for %s %s", symbol, timeframe)
+            return pd.DataFrame()
+
+        df = pd.concat(all_chunks).sort_index()
+        df = df[~df.index.duplicated(keep='first')]
+        self._save_data(symbol, timeframe, df)
+        logger.info("Fetched %s rows of full history for %s %s", len(df), symbol, timeframe)
+        return df
 
 
 if __name__ == "__main__":

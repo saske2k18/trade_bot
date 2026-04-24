@@ -1,85 +1,71 @@
 trading:
-  # Exchange configuration
   exchange: "binance"
   api_key: "${BINANCE_API_KEY}"
   api_secret: "${BINANCE_API_SECRET}"
-  
-  # Топ 5 криптовалют по капитализации
+
   symbols:
     - "BTC/USDT"
     - "ETH/USDT"
     - "BNB/USDT"
     - "SOL/USDT"
     - "XRP/USDT"
-  
-  # Все требуемые таймфреймы для обучения нейросети
+
   timeframes:
-    - "5m"   # 5 минут
-    - "15m"  # 15 минут
-    - "1h"   # 1 час
-    - "4h"   # 4 часа
-    - "12h"  # 12 часов
-    - "1d"   # 1 день
-    - "1w"   # 1 неделя
-  
-  # Order settings
+    - "5m"
+    - "15m"
+    - "1h"
+    - "4h"
+    - "12h"
+    - "1d"
+    - "1w"
+
   order_type: "market"
-  dry_run: true  # Set to false for real trading
+  dry_run: true
 
 risk_management:
-  # Position sizing (percentage of portfolio)
   max_position_size: 0.1
-  
-  # Stop loss and take profit (percentage)
+
   stop_loss: 0.02
   take_profit: 0.05
-  
-  # Maximum number of open positions
+
   max_open_positions: 3
-  
-  # Daily loss limit (percentage)
+
   daily_loss_limit: 0.05
 
 model:
-  # Model type: lstm, gru, transformer, xgboost, multi_timeframe_lstm
   type: "multi_timeframe_lstm"
-  
-  # Lookback period for each timeframe (in candles)
+
   lookback:
-    "5m": 60    # 5 часов истории
-    "15m": 48   # 12 часов истории
-    "1h": 48    # 2 дня истории
-    "4h": 48    # 8 дней истории
-    "12h": 20   # 10 дней истории
-    "1d": 30    # 1 месяц истории
-    "1w": 12    # 3 месяца истории
-  
-  # Prediction horizon
+    "5m": 60
+    "15m": 48
+    "1h": 48
+    "4h": 48
+    "12h": 20
+    "1d": 30
+    "1w": 12
+
   horizon: 10
-  
-  # Training parameters
+
   train_split: 0.8
   validation_split: 0.1
-  
-  # Hyperparameters
+
   hidden_units: 128
   num_layers: 2
   dropout_rate: 0.2
   learning_rate: 0.001
   batch_size: 32
   epochs: 50
-  
-  # Multi-timeframe fusion method: concat, attention, weighted_average
+
   fusion_method: "attention"
 
 data:
-  # Data source
   source: "ccxt"
-  
-  # Cache directory
   cache_dir: "data/raw"
-  
-  # Features to calculate
+
+  history:
+    start_date: "2010-01-01"
+    max_batches_per_request: 3000
+
   features:
     - "sma_20"
     - "sma_50"
@@ -89,26 +75,17 @@ data:
     - "volume_sma_20"
 
 logging:
-  # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
   level: "INFO"
-  
-  # Log file
+
   file: "logs/trade_bot.log"
-  
-  # Console output
+
   console: true
-  
-  # Rotation settings
+
   rotation:
-    max_bytes: 10485760  # 10MB
+    max_bytes: 10485760
     backup_count: 5
 
 database:
-  # Database type: sqlite, postgresql
   type: "sqlite"
-  
-  # Database path (for sqlite)
+
   path: "data/trades.db"
-  
-  # Connection string (for postgresql)
-  # connection_string: "postgresql://user:password@localhost:5432/trade_bot"
